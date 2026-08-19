@@ -41,10 +41,13 @@ export function PlayingScreen({ state, dispatch }: { state: GameState; dispatch:
   const low = (activeTeam?.clockSeconds ?? 0) <= 10
   const accent = activeTeam ? teamColor(activeTeam.colorIndex) : { from: '#e879f9', to: '#c026d3' }
 
-  const seats = state.teams.flatMap((t, ti) => [
-    { team: t, teamIndex: ti, isPlayer1: true, name: t.player1 },
-    { team: t, teamIndex: ti, isPlayer1: false, name: t.player2 },
-  ])
+  // Player-1s fill the first half of the circle, player-2s the second half at
+  // the same relative offset — since that's exactly half the seats apart,
+  // every teammate ends up directly opposite their partner, not beside them.
+  const seats = [
+    ...state.teams.map((t, ti) => ({ team: t, teamIndex: ti, isPlayer1: true, name: t.player1 })),
+    ...state.teams.map((t, ti) => ({ team: t, teamIndex: ti, isPlayer1: false, name: t.player2 })),
+  ]
 
   function handleSkip() {
     dispatch({ type: 'SKIP' })

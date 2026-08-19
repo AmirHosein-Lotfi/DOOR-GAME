@@ -94,16 +94,13 @@ function endRound(state: GameState): GameState {
   return { ...state, teams, round: { ...state.round, results }, phase: 'round-result' }
 }
 
-// Correct/Skip both resolve the current word: score it, flip that team's
-// describer, hand the phone to the next team in the round-robin, and draw
-// the next word.
-function advanceTurn(state: GameState, wordCorrect: boolean): GameState {
+// Correct: score the word, flip that team's describer, and hand the phone
+// to the next team in the round-robin.
+function passTurn(state: GameState): GameState {
   if (!state.round) return state
   const activeIndex = state.round.activeTeamIndex
   const teams = state.teams.map((t, i) =>
-    i === activeIndex
-      ? { ...t, describerIsPlayer1: !t.describerIsPlayer1, totalCorrect: t.totalCorrect + (wordCorrect ? 1 : 0) }
-      : t,
+    i === activeIndex ? { ...t, describerIsPlayer1: !t.describerIsPlayer1, totalCorrect: t.totalCorrect + 1 } : t,
   )
   const nextTeamIndex = (activeIndex + 1) % teams.length
   const { word, deck, discard } = drawWord(state.deck, state.discard)
@@ -116,6 +113,13 @@ function advanceTurn(state: GameState, wordCorrect: boolean): GameState {
     discard,
     phase: 'playing',
   }
+}
+
+// Skip: same describer keeps their turn, just gets a different word.
+function skipWord(state: GameState): GameState {
+  if (!state.round) return state
+  const { word, deck, discard } = drawWord(state.deck, state.discard)
+  return { ...state, currentWord: word, deck, discard }
 }
 
 function reducer(state: GameState, action: Action): GameState {
@@ -192,9 +196,9 @@ function reducer(state: GameState, action: Action): GameState {
       }
     }
     case 'CORRECT':
-      return advanceTurn(state, true)
+      return passTurn(state)
     case 'SKIP':
-      return advanceTurn(state, false)
+      return skipWord(state)
     case 'TICK': {
       if (state.phase !== 'playing' || !state.round) return state
       const activeIndex = state.round.activeTeamIndex

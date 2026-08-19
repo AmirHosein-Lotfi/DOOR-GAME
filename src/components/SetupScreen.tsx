@@ -8,6 +8,7 @@ import { teamGradient } from '../game/palette'
 import { PrimaryButton } from './ui/PrimaryButton'
 import { Stepper } from './ui/Stepper'
 import { Chip } from './ui/Chip'
+import { SeatArranger } from './SeatArranger'
 
 const DIFFICULTIES: { id: 'easy' | 'medium' | 'hard'; label: string }[] = [
   { id: 'easy', label: 'آسون' },
@@ -18,6 +19,7 @@ const DIFFICULTIES: { id: 'easy' | 'medium' | 'hard'; label: string }[] = [
 export function SetupScreen({ state, dispatch }: { state: GameState; dispatch: Dispatch<Action> }) {
   const [player1, setPlayer1] = useState('')
   const [player2, setPlayer2] = useState('')
+  const [arranging, setArranging] = useState(false)
 
   const canStart =
     state.teams.length >= 2 && state.config.categoryIds.length >= 1 && state.config.difficulties.length >= 1
@@ -113,6 +115,27 @@ export function SetupScreen({ state, dispatch }: { state: GameState; dispatch: D
               </motion.li>
             ))}
           </ul>
+        )}
+
+        {state.teams.length >= 2 && (
+          <>
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.96 }}
+              onClick={() => setArranging((v) => !v)}
+              className="w-full rounded-2xl bg-white/10 px-5 py-3 text-sm font-bold text-white/80"
+            >
+              {arranging ? '✅ تمومه' : '🔀 تغییر چیدمان دور میز'}
+            </motion.button>
+            {arranging && (
+              <div className="flex flex-col items-center gap-2 rounded-2xl bg-white/5 py-4">
+                <p className="text-xs font-medium text-white/40">
+                  هر آدم رو بکش روی جای یکی دیگه تا جاشون عوض بشه — نوبت‌ها همیشه ساعت‌گرد می‌چرخه
+                </p>
+                <SeatArranger state={state} dispatch={dispatch} />
+              </div>
+            )}
+          </>
         )}
       </section>
 

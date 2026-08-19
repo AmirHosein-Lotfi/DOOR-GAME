@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { GameState } from '../game/types'
 import type { Action } from '../game/useGameState'
 import { teamColor, teamGradient } from '../game/palette'
+import { seatStyle } from '../game/seatLayout'
 import { PauseButton } from './ui/PauseButton'
 
 const SKIP_COOLDOWN = 3
@@ -12,15 +13,6 @@ function formatTime(seconds: number) {
   const m = Math.floor(seconds / 60)
   const s = seconds % 60
   return `${m}:${s.toString().padStart(2, '0')}`
-}
-
-// Evenly places `total` seats around a circle, starting from the top.
-function seatStyle(index: number, total: number) {
-  const angle = (index / total) * 2 * Math.PI - Math.PI / 2
-  const r = 42
-  const left = 50 + r * Math.cos(angle)
-  const top = 50 + r * Math.sin(angle)
-  return { left: `${left}%`, top: `${top}%` }
 }
 
 export function PlayingScreen({ state, dispatch }: { state: GameState; dispatch: Dispatch<Action> }) {
@@ -36,19 +28,12 @@ export function PlayingScreen({ state, dispatch }: { state: GameState; dispatch:
     if (cooldownTimer.current) clearInterval(cooldownTimer.current)
   }, [])
 
-  const activeIndex = state.round?.activeTeamIndex ?? 0
-  const activeTeam = state.teams[activeIndex]
+  const activeSeatIndex = state.round?.activeSeatIndex ?? 0
+  const activeSeat = state.seatOrder[activeSeatIndex]
+  const activeTeam = state.teams.find((t) => t.id === activeSeat?.teamId)
   const low = (activeTeam?.clockSeconds ?? 0) <= 10
   const accent = activeTeam ? teamColor(activeTeam.colorIndex) : { from: '#e879f9', to: '#c026d3' }
   const isProverb = state.currentCategoryId === 'proverbs'
-
-  // Player-1s fill the first half of the circle, player-2s the second half at
-  // the same relative offset — since that's exactly half the seats apart,
-  // every teammate ends up directly opposite their partner, not beside them.
-  const seats = [
-    ...state.teams.map((t, ti) => ({ team: t, teamIndex: ti, isPlayer1: true, name: t.player1 })),
-    ...state.teams.map((t, ti) => ({ team: t, teamIndex: ti, isPlayer1: false, name: t.player2 })),
-  ]
 
   function handleSkip() {
     dispatch({ type: 'SKIP' })
@@ -112,27 +97,29 @@ export function PlayingScreen({ state, dispatch }: { state: GameState; dispatch:
           </div>
         </div>
 
-        {seats.map((seat, i) => {
-          const isActive = seat.teamIndex === activeIndex
-          const isDescriber = isActive && seat.isPlayer1 === seat.team.describerIsPlayer1
-          const isGuesser = isActive && !isDescriber
+        {state.seatOrder.map((seat, i) => {
+          const team = state.teams.find((t) => t.id === seat.teamId)
+          if (!team) return null
+          const name = seat.isPlayer1 ? team.player1 : team.player2
+          const isDescriber = i === activeSeatIndex
+          const isGuesser = !isDescriber && seat.teamId === activeSeat?.teamId
           return (
             <motion.div
-              key={`${seat.team.id}-${seat.isPlayer1}`}
-              animate={{ scale: isDescriber ? 1.18 : 1, opacity: isActive ? 1 : 0.55 }}
+              key={`${seat.teamId}-${seat.isPlayer1}`}
+              animate={{ scale: isDescriber ? 1.18 : 1, opacity: isDescriber || isGuesser ? 1 : 0.55 }}
               transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-              style={seatStyle(i, seats.length)}
+              style={seatStyle(i, state.seatOrder.length)}
               className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1"
             >
               <span
                 className={`grid h-12 w-12 place-items-center rounded-full text-sm font-black text-white shadow-lg ${
                   isDescriber ? 'ring-4 ring-white/80' : isGuesser ? 'ring-2 ring-white/40' : ''
                 }`}
-                style={{ backgroundImage: teamGradient(seat.teamIndex) }}
+                style={{ backgroundImage: teamGradient(team.colorIndex) }}
               >
-                {seat.name.trim().charAt(0) || '?'}
+                {name.trim().charAt(0) || '?'}
               </span>
-              <span className="max-w-16 truncate text-[11px] font-bold text-white/80">{seat.name}</span>
+              <span className="max-w-16 truncate text-[11px] font-bold text-white/80">{name}</span>
               {isDescriber && <span className="text-[10px] font-bold text-white/60">داره می‌گه</span>}
             </motion.div>
           )
@@ -141,13 +128,13 @@ export function PlayingScreen({ state, dispatch }: { state: GameState; dispatch:
 
       {/* mini scoreboard */}
       <div className="flex w-full max-w-md flex-wrap items-center justify-center gap-2">
-        {state.teams.map((t, i) => (
+        {state.teams.map((t) => (
           <span
             key={t.id}
             className={`rounded-full px-3 py-1.5 text-xs font-bold tabular-nums ${
-              i === activeIndex ? 'text-white shadow-md' : 'bg-white/5 text-white/50'
+              t.id === activeTeam?.id ? 'text-white shadow-md' : 'bg-white/5 text-white/50'
             }`}
-            style={i === activeIndex ? { backgroundImage: teamGradient(t.colorIndex) } : undefined}
+            style={t.id === activeTeam?.id ? { backgroundImage: teamGradient(t.colorIndex) } : undefined}
           >
             {t.name} · {formatTime(t.clockSeconds)}
           </span>

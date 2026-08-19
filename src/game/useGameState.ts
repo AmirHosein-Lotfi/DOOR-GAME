@@ -1,7 +1,7 @@
 import { useReducer } from 'react'
 import { WORD_CATEGORIES } from '../data/words'
 import type { Difficulty } from '../types'
-import type { GameState, Phase, Team, WordEntry } from './types'
+import type { GameState, Phase, Seat, Team, WordEntry } from './types'
 
 const PROVERB_CATEGORY_ID = 'proverbs'
 const PROVERB_BONUS_SECONDS = 10
@@ -17,6 +17,16 @@ function shuffle<T>(arr: T[]): T[] {
     ;[a[i], a[j]] = [a[j], a[i]]
   }
   return a
+}
+
+// Default seating: every team's player-1 around the first half of the
+// table, player-2s the second half — so partners start out opposite each
+// other. The user can then drag seats around to match real life.
+function defaultSeatOrder(teams: Team[]): Seat[] {
+  return [
+    ...teams.map((t) => ({ teamId: t.id, isPlayer1: true })),
+    ...teams.map((t) => ({ teamId: t.id, isPlayer1: false })),
+  ]
 }
 
 function buildPool(config: GameState['config']): WordEntry[] {
@@ -68,12 +78,14 @@ const initialState: GameState = {
   currentCategoryId: '',
   deck: [],
   discard: [],
+  seatOrder: [],
   pausedFrom: null,
 }
 
 export type Action =
   | { type: 'ADD_TEAM'; player1: string; player2: string }
   | { type: 'REMOVE_TEAM'; id: string }
+  | { type: 'SET_SEAT_ORDER'; order: Seat[] }
   | { type: 'SET_ROUNDS'; value: number }
   | { type: 'SET_ROUND_MINUTES'; value: number }
   | { type: 'TOGGLE_CATEGORY'; id: string }
@@ -101,28 +113,21 @@ function endRound(state: GameState): GameState {
   return { ...state, teams, round: { ...state.round, results }, phase: 'round-result' }
 }
 
-// Correct: score the word, flip that team's describer, hand the phone to
-// the next team, and — if it was a proverb — add a time bonus first.
+// Correct: score the word for the active seat's team, hand the phone to the
+// next seat clockwise, and — if it was a proverb — add a time bonus first.
 function passTurn(state: GameState): GameState {
-  if (!state.round) return state
-  const activeIndex = state.round.activeTeamIndex
+  if (!state.round || state.seatOrder.length === 0) return state
+  const activeSeat = state.seatOrder[state.round.activeSeatIndex]
   const bonus = state.currentCategoryId === PROVERB_CATEGORY_ID ? PROVERB_BONUS_SECONDS : 0
-  const teams = state.teams.map((t, i) =>
-    i === activeIndex
-      ? {
-          ...t,
-          describerIsPlayer1: !t.describerIsPlayer1,
-          totalCorrect: t.totalCorrect + 1,
-          clockSeconds: t.clockSeconds + bonus,
-        }
-      : t,
+  const teams = state.teams.map((t) =>
+    t.id === activeSeat.teamId ? { ...t, totalCorrect: t.totalCorrect + 1, clockSeconds: t.clockSeconds + bonus } : t,
   )
-  const nextTeamIndex = (activeIndex + 1) % teams.length
+  const nextSeatIndex = (state.round.activeSeatIndex + 1) % state.seatOrder.length
   const { entry, deck, discard } = drawWord(state.deck, state.discard)
   return {
     ...state,
     teams,
-    round: { ...state.round, activeTeamIndex: nextTeamIndex },
+    round: { ...state.round, activeSeatIndex: nextSeatIndex },
     currentWord: entry.word,
     currentCategoryId: entry.categoryId,
     deck,
@@ -152,16 +157,20 @@ function reducer(state: GameState, action: Action): GameState {
         player1,
         player2,
         colorIndex: state.teams.length,
-        describerIsPlayer1: true,
         clockSeconds: state.config.roundSeconds,
         roundWins: 0,
         totalRemainingTime: 0,
         totalCorrect: 0,
       }
-      return { ...state, teams: [...state.teams, team] }
+      const teams = [...state.teams, team]
+      return { ...state, teams, seatOrder: defaultSeatOrder(teams) }
     }
-    case 'REMOVE_TEAM':
-      return { ...state, teams: state.teams.filter((t) => t.id !== action.id) }
+    case 'REMOVE_TEAM': {
+      const teams = state.teams.filter((t) => t.id !== action.id)
+      return { ...state, teams, seatOrder: defaultSeatOrder(teams) }
+    }
+    case 'SET_SEAT_ORDER':
+      return { ...state, seatOrder: action.order }
     case 'SET_ROUNDS':
       return { ...state, config: { ...state.config, rounds: clamp(action.value, 1, 10) } }
     case 'SET_ROUND_MINUTES':
@@ -206,7 +215,7 @@ function reducer(state: GameState, action: Action): GameState {
       return {
         ...state,
         teams,
-        round: { roundNumber: state.currentRound, activeTeamIndex: 0, results: [] },
+        round: { roundNumber: state.currentRound, activeSeatIndex: 0, results: [] },
         currentWord: entry.word,
         currentCategoryId: entry.categoryId,
         deck,
@@ -219,15 +228,16 @@ function reducer(state: GameState, action: Action): GameState {
     case 'SKIP':
       return skipWord(state)
     case 'TICK': {
-      if (state.phase !== 'playing' || !state.round) return state
-      const activeIndex = state.round.activeTeamIndex
-      const active = state.teams[activeIndex]
+      if (state.phase !== 'playing' || !state.round || state.seatOrder.length === 0) return state
+      const activeTeamId = state.seatOrder[state.round.activeSeatIndex].teamId
+      const active = state.teams.find((t) => t.id === activeTeamId)
+      if (!active) return state
       if (active.clockSeconds <= 1) {
-        const teams = state.teams.map((t, i) => (i === activeIndex ? { ...t, clockSeconds: 0 } : t))
+        const teams = state.teams.map((t) => (t.id === activeTeamId ? { ...t, clockSeconds: 0 } : t))
         return endRound({ ...state, teams })
       }
-      const teams = state.teams.map((t, i) =>
-        i === activeIndex ? { ...t, clockSeconds: t.clockSeconds - 1 } : t,
+      const teams = state.teams.map((t) =>
+        t.id === activeTeamId ? { ...t, clockSeconds: t.clockSeconds - 1 } : t,
       )
       return { ...state, teams }
     }
@@ -246,7 +256,6 @@ function reducer(state: GameState, action: Action): GameState {
           totalRemainingTime: 0,
           totalCorrect: 0,
           clockSeconds: state.config.roundSeconds,
-          describerIsPlayer1: true,
         })),
         currentRound: 0,
         round: null,

@@ -14,11 +14,15 @@ export interface Team {
   player1: string
   player2: string
   colorIndex: number
-  describerIsPlayer1: boolean
   clockSeconds: number
   roundWins: number
   totalRemainingTime: number
   totalCorrect: number
+}
+
+export interface Seat {
+  teamId: string
+  isPlayer1: boolean
 }
 
 export interface RoundResultEntry {
@@ -35,7 +39,7 @@ export interface Config {
 
 export interface RoundState {
   roundNumber: number
-  activeTeamIndex: number
+  activeSeatIndex: number
   results: RoundResultEntry[]
 }
 
@@ -54,5 +58,8 @@ export interface GameState {
   currentCategoryId: string
   deck: WordEntry[]
   discard: WordEntry[]
+  // Clockwise seating order around the table — editable by drag-and-drop so
+  // it can match how the group is actually sitting; turn order follows it.
+  seatOrder: Seat[]
   pausedFrom: Phase | null
 }

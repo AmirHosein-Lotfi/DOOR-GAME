@@ -40,6 +40,7 @@ export function PlayingScreen({ state, dispatch }: { state: GameState; dispatch:
   const activeTeam = state.teams[activeIndex]
   const low = (activeTeam?.clockSeconds ?? 0) <= 10
   const accent = activeTeam ? teamColor(activeTeam.colorIndex) : { from: '#e879f9', to: '#c026d3' }
+  const isProverb = state.currentCategoryId === 'proverbs'
 
   // Player-1s fill the first half of the circle, player-2s the second half at
   // the same relative offset — since that's exactly half the seats apart,
@@ -51,6 +52,7 @@ export function PlayingScreen({ state, dispatch }: { state: GameState; dispatch:
 
   function handleSkip() {
     dispatch({ type: 'SKIP' })
+    if (isProverb) return // proverbs: skip as much as you want, no cooldown
     if (cooldownTimer.current) clearInterval(cooldownTimer.current)
     setCooldown(SKIP_COOLDOWN)
     cooldownTimer.current = setInterval(() => {
@@ -81,6 +83,11 @@ export function PlayingScreen({ state, dispatch }: { state: GameState; dispatch:
 
         <div className="absolute inset-0 grid place-items-center">
           <div className="flex flex-col items-center gap-1 px-6 text-center">
+            {isProverb && (
+              <span className="mb-1 rounded-full bg-amber-400/20 px-3 py-1 text-[11px] font-bold text-amber-300">
+                📜 ضرب‌المثل · درست بگی +۱۰ ثانیه، رد کردن آزاده
+              </span>
+            )}
             <motion.span
               animate={
                 low ? { scale: [1, 1.08, 1], color: ['#f87171', '#ef4444', '#f87171'] } : { scale: 1, color: '#fde68a' }
@@ -150,12 +157,12 @@ export function PlayingScreen({ state, dispatch }: { state: GameState; dispatch:
       <div className="mt-auto grid w-full max-w-md grid-cols-2 gap-4">
         <motion.button
           type="button"
-          whileTap={cooldown === 0 ? { scale: 0.94 } : undefined}
-          disabled={cooldown > 0}
+          whileTap={cooldown === 0 || isProverb ? { scale: 0.94 } : undefined}
+          disabled={cooldown > 0 && !isProverb}
           onClick={handleSkip}
           className="rounded-3xl bg-white/10 py-6 text-xl font-black text-white/80 shadow-lg disabled:opacity-30"
         >
-          {cooldown > 0 ? `⏳ ${cooldown}` : '🔁 عوض کن'}
+          {cooldown > 0 && !isProverb ? `⏳ ${cooldown}` : '🔁 عوض کن'}
         </motion.button>
         <motion.button
           type="button"

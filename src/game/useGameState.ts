@@ -1,7 +1,10 @@
 import { useReducer } from 'react'
 import { WORD_CATEGORIES } from '../data/words'
 import type { Difficulty } from '../types'
-import type { GameState, Phase, Team } from './types'
+import type { GameState, Phase, Team, WordEntry } from './types'
+
+const PROVERB_CATEGORY_ID = 'proverbs'
+const PROVERB_BONUS_SECONDS = 10
 
 function clamp(v: number, min: number, max: number) {
   return Math.min(max, Math.max(min, v))
@@ -16,12 +19,12 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
-function buildPool(config: GameState['config']): string[] {
-  const pool: string[] = []
+function buildPool(config: GameState['config']): WordEntry[] {
+  const pool: WordEntry[] = []
   for (const cat of WORD_CATEGORIES) {
     if (!config.categoryIds.includes(cat.id)) continue
     for (const diff of config.difficulties) {
-      pool.push(...cat.words[diff])
+      for (const word of cat.words[diff]) pool.push({ word, categoryId: cat.id })
     }
   }
   // Shuffle twice — cheap insurance against any single-pass shuffle bias.
@@ -31,16 +34,19 @@ function buildPool(config: GameState['config']): string[] {
 // Draws one word without repeating until the whole pool has been used once.
 // When the deck runs dry, the discard pile (already-used words) is
 // reshuffled back into a fresh deck.
-function drawWord(deck: string[], discard: string[]): { word: string; deck: string[]; discard: string[] } {
+function drawWord(
+  deck: WordEntry[],
+  discard: WordEntry[],
+): { entry: WordEntry; deck: WordEntry[]; discard: WordEntry[] } {
   let d = [...deck]
   let used = [...discard]
   if (d.length === 0) {
-    if (used.length === 0) return { word: '', deck: d, discard: used }
+    if (used.length === 0) return { entry: { word: '', categoryId: '' }, deck: d, discard: used }
     d = shuffle(used)
     used = []
   }
-  const word = d.shift() as string
-  return { word, deck: d, discard: [...used, word] }
+  const entry = d.shift() as WordEntry
+  return { entry, deck: d, discard: [...used, entry] }
 }
 
 function defaultConfig(): GameState['config'] {
@@ -59,6 +65,7 @@ const initialState: GameState = {
   currentRound: 0,
   round: null,
   currentWord: '',
+  currentCategoryId: '',
   deck: [],
   discard: [],
   pausedFrom: null,
@@ -94,21 +101,30 @@ function endRound(state: GameState): GameState {
   return { ...state, teams, round: { ...state.round, results }, phase: 'round-result' }
 }
 
-// Correct: score the word, flip that team's describer, and hand the phone
-// to the next team in the round-robin.
+// Correct: score the word, flip that team's describer, hand the phone to
+// the next team, and — if it was a proverb — add a time bonus first.
 function passTurn(state: GameState): GameState {
   if (!state.round) return state
   const activeIndex = state.round.activeTeamIndex
+  const bonus = state.currentCategoryId === PROVERB_CATEGORY_ID ? PROVERB_BONUS_SECONDS : 0
   const teams = state.teams.map((t, i) =>
-    i === activeIndex ? { ...t, describerIsPlayer1: !t.describerIsPlayer1, totalCorrect: t.totalCorrect + 1 } : t,
+    i === activeIndex
+      ? {
+          ...t,
+          describerIsPlayer1: !t.describerIsPlayer1,
+          totalCorrect: t.totalCorrect + 1,
+          clockSeconds: t.clockSeconds + bonus,
+        }
+      : t,
   )
   const nextTeamIndex = (activeIndex + 1) % teams.length
-  const { word, deck, discard } = drawWord(state.deck, state.discard)
+  const { entry, deck, discard } = drawWord(state.deck, state.discard)
   return {
     ...state,
     teams,
     round: { ...state.round, activeTeamIndex: nextTeamIndex },
-    currentWord: word,
+    currentWord: entry.word,
+    currentCategoryId: entry.categoryId,
     deck,
     discard,
     phase: 'playing',
@@ -116,10 +132,12 @@ function passTurn(state: GameState): GameState {
 }
 
 // Skip: same describer keeps their turn, just gets a different word.
+// (Proverb-skip being penalty-free is enforced in the UI — this just swaps
+// the word either way.)
 function skipWord(state: GameState): GameState {
   if (!state.round) return state
-  const { word, deck, discard } = drawWord(state.deck, state.discard)
-  return { ...state, currentWord: word, deck, discard }
+  const { entry, deck, discard } = drawWord(state.deck, state.discard)
+  return { ...state, currentWord: entry.word, currentCategoryId: entry.categoryId, deck, discard }
 }
 
 function reducer(state: GameState, action: Action): GameState {
@@ -184,12 +202,13 @@ function reducer(state: GameState, action: Action): GameState {
       }
     case 'ROUND_INTRO_DONE': {
       const teams = state.teams.map((t) => ({ ...t, clockSeconds: state.config.roundSeconds }))
-      const { word, deck, discard } = drawWord(state.deck, state.discard)
+      const { entry, deck, discard } = drawWord(state.deck, state.discard)
       return {
         ...state,
         teams,
         round: { roundNumber: state.currentRound, activeTeamIndex: 0, results: [] },
-        currentWord: word,
+        currentWord: entry.word,
+        currentCategoryId: entry.categoryId,
         deck,
         discard,
         phase: 'playing',

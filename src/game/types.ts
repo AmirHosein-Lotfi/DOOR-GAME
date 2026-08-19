@@ -39,6 +39,11 @@ export interface RoundState {
   results: RoundResultEntry[]
 }
 
+export interface WordEntry {
+  word: string
+  categoryId: string
+}
+
 export interface GameState {
   phase: Phase
   teams: Team[]
@@ -46,7 +51,8 @@ export interface GameState {
   currentRound: number
   round: RoundState | null
   currentWord: string
-  deck: string[]
-  discard: string[]
+  currentCategoryId: string
+  deck: WordEntry[]
+  discard: WordEntry[]
   pausedFrom: Phase | null
 }

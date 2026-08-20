@@ -130,7 +130,8 @@ export function SetupScreen({ state, dispatch }: { state: GameState; dispatch: D
             {arranging && (
               <div className="flex flex-col items-center gap-2 rounded-2xl bg-white/5 py-4">
                 <p className="text-xs font-medium text-white/40">
-                  هر آدم رو بکش روی جای یکی دیگه تا جاشون عوض بشه — نوبت‌ها همیشه ساعت‌گرد می‌چرخه
+                  هر آدم رو بکش روی جای یکی دیگه، یا دوتاشون رو پشت سر هم بزن تا جاشون عوض بشه — نوبت‌ها همیشه
+                  ساعت‌گرد می‌چرخه
                 </p>
                 <SeatArranger state={state} dispatch={dispatch} />
               </div>
